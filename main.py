@@ -63,7 +63,8 @@ EN_TO_AR = {
     "Crop to fit": "قص لملاءمة اللوح", "Flip Horizontal": "عكس أفقي",
     "Match source-image detail": "مطابقة تفاصيل الصورة الأصلية", "Lock image ratio": "قفل نسبة الصورة",
     "Brightness": "السطوع", "Contrast": "التباين", "Intensity": "الشدة", "Nightlight": "إضاءة خلفية",
-    "Backlight Preview": "معاينة الإضاءة الخلفية",
+    "Backlight Preview": "معاينة الإضاءة الخلفية", "Preview mode": "وضع المعاينة",
+    "Lightbox": "صندوق الإضاءة", "Studio": "الاستوديو",
     "Color": "اللون", "Gamma": "غاما", "Auto contrast": "تباين تلقائي", "Smooth detail": "تنعيم التفاصيل",
     "Mirror for printing": "عكس للطباعة", "Invert image": "عكس الصورة", "Upload Image": "رفع صورة",
     "Change Image": "تغيير الصورة", "✦  Generate Model": "✦  إنشاء النموذج", "⇩  Export STL": "⇩  تصدير STL",
@@ -357,6 +358,9 @@ class MeshPreview(QOpenGLWidget):
         self.texture_image = None
         self.texture_id = None
         self.texture_dirty = False
+        self.studio_texture_image = None
+        self.studio_texture_id = None
+        self.studio_texture_dirty = False
         # Buffer objects keep vertex and index memory stable on every driver.
         # The old client-array path could show diagonal seams on some OpenGL
         # implementations when a large temporary NumPy index array was drawn.
@@ -385,6 +389,9 @@ class MeshPreview(QOpenGLWidget):
         self.night_enabled = True
         self.night_intensity = 80
         self.light_color = QColor("#fff0bd")
+        # Lightbox prioritizes transmitted image detail. Studio uses the same
+        # mesh but a neutral, angled material light to inspect its geometry.
+        self.presentation_mode = "lightbox"
         self.setMinimumHeight(190 if small else 500)
 
     def set_mesh(self, vertices, faces, grid_shape, image_path, heightmap=None, spherical=False,
@@ -421,6 +428,7 @@ class MeshPreview(QOpenGLWidget):
             # Mesh rows advance upward in OpenGL while image rows advance
             # downward, so reverse the source rows to preserve photo orientation.
             self.vertex_tones = np.asarray(heightmap, dtype=np.float32)[::-1, :].reshape(-1)
+            self._set_studio_texture(np.asarray(heightmap, dtype=np.float32))
         else:
             self.vertex_tones = np.full(self.rows * self.cols, 0.72, dtype=np.float32)
         triangles = self.vertices[self.faces]
@@ -499,6 +507,13 @@ class MeshPreview(QOpenGLWidget):
         self._auto_fit = True
         self.update()
 
+    def set_presentation_mode(self, mode):
+        mode = "studio" if mode == "studio" else "lightbox"
+        if self.presentation_mode == mode:
+            return
+        self.presentation_mode = mode
+        self.update()
+
     def set_lighting(self, brightness, contrast, night_enabled, night_intensity, color):
         changed = (self.brightness, self.contrast, self.night_enabled, self.night_intensity, self.light_color) != (
             brightness, contrast, night_enabled, night_intensity, color
@@ -569,21 +584,44 @@ class MeshPreview(QOpenGLWidget):
         if self._auto_fit and self.vertices is not None:
             self.distance = self._fit_distance()
 
-    def _upload_texture(self):
-        if not self.texture_dirty or self.texture_image is None:
-            return
-        if self.texture_id is None:
-            self.texture_id = glGenTextures(1)
-        glBindTexture(GL_TEXTURE_2D, self.texture_id)
+    def _set_studio_texture(self, heightmap):
+        """Build a neutral tonal material map for geometric Studio inspection."""
+        photo = np.clip(np.asarray(heightmap, dtype=np.float32), 0.0, 1.0)
+        grad_y, grad_x = np.gradient(photo)
+        edge = np.clip(np.hypot(grad_x, grad_y) * 2.2, 0.0, 0.22)
+        tone = np.clip(0.34 + photo * 0.50 - edge, 0.16, 0.88)
+        rgba = np.empty((*tone.shape, 4), dtype=np.uint8)
+        rgba[..., 0] = (tone * 0.88 * 255.0).astype(np.uint8)
+        rgba[..., 1] = (tone * 0.93 * 255.0).astype(np.uint8)
+        rgba[..., 2] = (tone * 255.0).astype(np.uint8)
+        rgba[..., 3] = 255
+        pixels = np.ascontiguousarray(rgba)
+        self.studio_texture_image = QImage(
+            pixels.data, pixels.shape[1], pixels.shape[0], pixels.shape[1] * 4,
+            QImage.Format.Format_RGBA8888,
+        ).copy()
+        self.studio_texture_dirty = True
+
+    def _upload_qimage_texture(self, image, texture_id):
+        if texture_id is None:
+            texture_id = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, texture_id)
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
-        image = self.texture_image
         data = bytes(image.bits())
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width(), image.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, data)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-        self.texture_dirty = False
+        return texture_id
+
+    def _upload_texture(self):
+        if self.texture_dirty and self.texture_image is not None:
+            self.texture_id = self._upload_qimage_texture(self.texture_image, self.texture_id)
+            self.texture_dirty = False
+        if self.studio_texture_dirty and self.studio_texture_image is not None:
+            self.studio_texture_id = self._upload_qimage_texture(self.studio_texture_image, self.studio_texture_id)
+            self.studio_texture_dirty = False
 
     def _draw_floor(self):
         glDisable(GL_LIGHTING)
@@ -599,13 +637,27 @@ class MeshPreview(QOpenGLWidget):
         glEnd()
 
     def _set_lights(self):
+        glEnable(GL_LIGHTING)
+        glEnable(GL_LIGHT0)
+        if self.presentation_mode == "studio":
+            # Neutral three-dimensional inspection: a soft key from above-right
+            # and restrained ambient fill reveal edges and relief without a
+            # competing transmitted-light glow.
+            glLightModelfv(GL_LIGHT_MODEL_AMBIENT, (0.11, 0.12, 0.15, 1.0))
+            glLightfv(GL_LIGHT0, GL_POSITION, (4.8, 5.6, 6.5, 1.0))
+            glLightfv(GL_LIGHT0, GL_DIFFUSE, (0.88, 0.91, 1.0, 1.0))
+            glLightfv(GL_LIGHT0, GL_SPECULAR, (0.34, 0.36, 0.42, 1.0))
+            glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, (0.19, 0.21, 0.25, 1.0))
+            glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, (0.72, 0.74, 0.80, 1.0))
+            glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, (0.24, 0.27, 0.32, 1.0))
+            glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, (28.0,))
+            glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, (0.0, 0.0, 0.0, 1.0))
+            return
         col = self.light_color
         intensity = self.night_intensity / 100 if self.night_enabled else 0.15
         rgb = (col.redF(), col.greenF(), col.blueF())
         ambient = (0.025 + intensity * 0.10, 0.022 + intensity * 0.08, 0.030 + intensity * 0.06, 1.0)
         diffuse = tuple(min(1.0, channel * (0.35 + intensity * 0.55)) for channel in rgb) + (1.0,)
-        glEnable(GL_LIGHTING)
-        glEnable(GL_LIGHT0)
         glLightModelfv(GL_LIGHT_MODEL_AMBIENT, ambient)
         glLightfv(GL_LIGHT0, GL_POSITION, (3.5, 4.8, 5.5, 1.0))
         glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse)
@@ -615,8 +667,8 @@ class MeshPreview(QOpenGLWidget):
         glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, warm)
         glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, (0.07, 0.06, 0.05, 1.0))
         glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, (10.0,))
-        # A lithophane is normally viewed with a lamp behind it, so a measured
-        # warm emissive term is needed in addition to the studio key light.
+        # The lightbox intentionally uses a small warm emission in addition to
+        # the transmission texture, matching a lit printed panel.
         emissive = tuple(channel * (0.12 + intensity * 0.34) for channel in rgb) + (1.0,)
         glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, emissive)
 
@@ -644,19 +696,23 @@ class MeshPreview(QOpenGLWidget):
     def _draw_triangles(self, start, end, textured):
         if start >= end:
             return
-        use_texture = bool(textured and self.texture_id is not None)
+        texture_id = self.texture_id if self.presentation_mode == "lightbox" else self.studio_texture_id
+        use_texture = bool(textured and texture_id is not None)
         if use_texture:
-            # The transmission texture already encodes light through the real
-            # thickness profile. Drawing it without a second front light keeps
-            # the image readable and avoids dark triangle-to-triangle shading.
-            glDisable(GL_LIGHTING)
+            # Lightbox encodes transmitted light in its texture. Studio instead
+            # modulates a neutral material map with its angled geometry light.
+            if self.presentation_mode == "lightbox":
+                glDisable(GL_LIGHTING)
             glEnable(GL_TEXTURE_2D)
-            glBindTexture(GL_TEXTURE_2D, self.texture_id)
+            glBindTexture(GL_TEXTURE_2D, texture_id)
             glColor3f(1.0, 1.0, 1.0)
         else:
             glDisable(GL_TEXTURE_2D)
             if not textured:
-                glColor3f(0.42, 0.33, 0.22)
+                if self.presentation_mode == "studio":
+                    glColor3f(0.74, 0.78, 0.88)
+                else:
+                    glColor3f(0.42, 0.33, 0.22)
         glEnableClientState(GL_VERTEX_ARRAY)
         if use_texture:
             glEnableClientState(GL_TEXTURE_COORD_ARRAY)
@@ -682,6 +738,10 @@ class MeshPreview(QOpenGLWidget):
         glDisableClientState(GL_VERTEX_ARRAY)
 
     def paintGL(self):
+        if self.presentation_mode == "studio":
+            glClearColor(0.055, 0.068, 0.095, 1.0)
+        else:
+            glClearColor(0.012, 0.018, 0.030, 1.0)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
@@ -692,6 +752,10 @@ class MeshPreview(QOpenGLWidget):
         glFrustum(-right, right, -top, top, near, far)
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
+        # Define lights in camera space before model rotations. Studio lighting
+        # then remains on the same side of the viewer as the user rotates the
+        # panel, rather than rotating behind the model and turning it black.
+        self._set_lights()
         glTranslatef(self.pan_x, self.pan_y, -self.distance)
         glRotatef(self.pitch, 1.0, 0.0, 0.0)
         glRotatef(self.yaw, 0.0, 1.0, 0.0)
@@ -701,21 +765,22 @@ class MeshPreview(QOpenGLWidget):
             return
         self._upload_texture()
         self._upload_mesh_buffers()
-        self._set_lights()
         glEnable(GL_COLOR_MATERIAL)
         glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
         top_end = min(self.top_face_count, len(self.faces))
         bottom_end = min(self.top_face_count * 2, len(self.faces))
+        # Both modes use the same mesh. Lightbox applies the transmitted image;
+        # Studio applies a neutral tonal material map under directional light.
+        photo_textured = True
         if self.image_surface == "outer":
             self._draw_triangles(0, top_end, textured=False)
             self._draw_triangles(bottom_end, len(self.faces), textured=False)
-            self._draw_triangles(top_end, bottom_end, textured=True)
+            self._draw_triangles(top_end, bottom_end, textured=photo_textured)
         else:
-            # Draw the opaque back and perimeter first. The transmitted image
-            # surface is drawn last so no perimeter or back-face fragment can
-            # visually leak across it on conservative software depth buffers.
+            # Draw the opaque back and perimeter first. The transmission layer
+            # is last in Lightbox; Studio draws the identical mesh untextured.
             self._draw_triangles(top_end, len(self.faces), textured=False)
-            self._draw_triangles(0, top_end, textured=True)
+            self._draw_triangles(0, top_end, textured=photo_textured)
         glDisable(GL_TEXTURE_2D)
         glDisable(GL_COLOR_MATERIAL)
 
@@ -756,6 +821,7 @@ class MainWindow(QMainWindow):
         self._ratio_updating = False
         self.mode = "plane"
         self.language = "en"
+        self.preview_mode = "lightbox"
         self.translatable_toggle_captions = []
         self.preview_timer = QTimer(self)
         self.preview_timer.setSingleShot(True)
@@ -885,6 +951,10 @@ class MainWindow(QMainWindow):
         for index in range(self.relief_mode.count()):
             key = "Engrave" if self.relief_mode.itemData(index) == "engrave" else "Raise"
             self.relief_mode.setItemText(index, self._tr(key))
+        for index in range(self.preview_mode_selector.count()):
+            key = "Lightbox" if self.preview_mode_selector.itemData(index) == "lightbox" else "Studio"
+            self.preview_mode_selector.setItemText(index, self._tr(key))
+        self._update_presentation_badge()
         self.relief_mode.setToolTip(
             "اختر الحفر أو البروز للصورة" if arabic else "Choose engraved or raised image detail"
         )
@@ -909,6 +979,7 @@ class MainWindow(QMainWindow):
                 "• اختر حفر أو بروز من قائمة تضاريس الصورة.\n"
                 "• عمق الحفر/البروز يحدد فرق العمق من 0 حتى 10 مم.\n"
                 "• دقة الهدف تُقيَّد تلقائيًا بدقة الصورة ومسافة بكسل الطباعة وأمان الشبكة.\n"
+                "• وضع صندوق الإضاءة يوضح الصورة المضيئة، بينما وضع الاستوديو يوضح الحفر والبروز والحواف.\n"
                 "• اسحب داخل المعاينة للدوران واستخدم عجلة الفأرة للتقريب، ثم أنشئ النموذج وصدّر STL."
             )
         else:
@@ -918,6 +989,7 @@ class MainWindow(QMainWindow):
                 "• Choose Engrave or Raise under Image relief.\n"
                 "• Relief depth sets the image depth from 0 to 10 mm.\n"
                 "• Target Resolution is automatically limited by image detail, print pixel pitch, and mesh safety.\n"
+                "• Lightbox shows the lit image; Studio reveals relief, edges, and thickness.\n"
                 "• Drag in 3D Preview to rotate, use the mouse wheel to zoom, then Generate Model and Export STL."
             )
         QMessageBox.information(self, APP_TITLE, f"{title}\n\n{body}")
@@ -1055,8 +1127,11 @@ class MainWindow(QMainWindow):
         title.setObjectName("previewTitle")
         self.live_badge = QLabel("LIVE MESH")
         self.live_badge.setObjectName("liveBadge")
+        self.presentation_badge = QLabel("LIGHTBOX")
+        self.presentation_badge.setObjectName("modeBadge")
         header.addWidget(title)
         header.addWidget(self.live_badge)
+        header.addWidget(self.presentation_badge)
         header.addStretch()
         for symbol, tip, action in (
             ("⟲", "Reset camera", lambda: self.preview.reset_camera()),
@@ -1071,6 +1146,7 @@ class MainWindow(QMainWindow):
             header.addWidget(tool)
         column.addLayout(header)
         self.preview = MeshPreview()
+        self.preview.viewChanged.connect(self._preview_view_changed)
         column.addWidget(self.preview, 1)
         guide = QFrame()
         guide.setObjectName("guide")
@@ -1086,6 +1162,18 @@ class MainWindow(QMainWindow):
 
     def _build_right(self):
         lighting = Section("LIGHTING", "☼")
+        self.preview_mode_selector = QComboBox()
+        self.preview_mode_selector.setObjectName("previewMode")
+        self.preview_mode_selector.addItem("Lightbox", "lightbox")
+        self.preview_mode_selector.addItem("Studio", "studio")
+        mode_line = QHBoxLayout()
+        mode_line.setContentsMargins(0, 2, 0, 2)
+        mode_label = QLabel("Preview mode")
+        mode_label.setObjectName("fieldCaption")
+        mode_line.addWidget(mode_label)
+        mode_line.addStretch()
+        mode_line.addWidget(self.preview_mode_selector)
+        lighting.add_layout(mode_line)
         self.brightness = SliderField("Brightness", 75)
         self.contrast = SliderField("Contrast", 60)
         self.nightlight = Toggle(True)
@@ -1147,6 +1235,7 @@ class MainWindow(QMainWindow):
         render.add(self.preview_detail)
         self.right.addWidget(render)
         self.right.addStretch(1)
+        self.preview_mode_selector.currentIndexChanged.connect(self._apply_preview_mode)
         for slider in (self.brightness, self.contrast, self.intensity):
             slider.valueChanged.connect(self.update_lights)
         self.nightlight.toggled.connect(self.update_lights)
@@ -1446,26 +1535,61 @@ class MainWindow(QMainWindow):
                 f"Panel: {self.width.value():.1f} × {self.height.value():.1f} × {total_depth:.1f} mm"
             )
 
+    def _update_presentation_badge(self):
+        if not hasattr(self, "presentation_badge"):
+            return
+        if self.preview_mode == "studio":
+            self.presentation_badge.setText("الاستوديو" if self.language == "ar" else "STUDIO")
+        else:
+            self.presentation_badge.setText("صندوق الإضاءة" if self.language == "ar" else "LIGHTBOX")
+
+    def _apply_preview_mode(self, *args):
+        mode = self.preview_mode_selector.currentData() or "lightbox"
+        self.preview_mode = mode
+        self.preview.set_presentation_mode(mode)
+        self.mini_preview.set_presentation_mode(mode)
+        self._update_presentation_badge()
+        self.update_lights()
+
+    def _preview_view_changed(self):
+        # Rotation signals geometric inspection, so Studio becomes active at
+        # once; the mesh and all STL parameters remain entirely unchanged.
+        if self.preview_mode != "studio" and (abs(self.preview.yaw) > 1.0 or abs(self.preview.pitch) > 1.0):
+            self.preview_mode_selector.setCurrentIndex(1)
+
     def _update_backlight_ui(self):
-        enabled = self.nightlight.isChecked()
+        is_lightbox = self.preview_mode == "lightbox"
+        enabled = is_lightbox and self.nightlight.isChecked()
+        self.nightlight.setEnabled(is_lightbox)
+        self.brightness.setEnabled(is_lightbox)
+        self.contrast.setEnabled(is_lightbox)
         self.intensity.setEnabled(enabled)
         self.color_button.setEnabled(enabled)
-        if self.language == "ar":
+        if not is_lightbox:
+            text = "وضع الاستوديو: إضاءة محايدة لفحص الشكل والحواف والسماكة."
+            if self.language != "ar":
+                text = "Studio mode: neutral light for inspecting relief, edges, and thickness."
+        elif self.language == "ar":
             state = "مفعّلة" if enabled else "متوقفة"
-            text = f"معاينة الإضاءة الخلفية: {state} · {self.intensity.value()}% · {self.light_color.name().upper()}"
+            text = f"معاينة الإضاءة الخلفية: {state} · صندوق الإضاءة · {self.intensity.value()}% · {self.light_color.name().upper()}"
         else:
             state = "ON" if enabled else "OFF"
-            text = f"Backlight Preview: {state} · {self.intensity.value()}% · {self.light_color.name().upper()}"
+            text = f"Backlight Preview: {state} · Lightbox · {self.intensity.value()}% · {self.light_color.name().upper()}"
         self.backlight_status.setText(text)
 
     def update_lights(self, *args):
-        values = (self.brightness.value(), self.contrast.value(), self.nightlight.isChecked(), self.intensity.value(), self.light_color)
+        backlight_active = self.preview_mode == "lightbox" and self.nightlight.isChecked()
+        values = (self.brightness.value(), self.contrast.value(), backlight_active, self.intensity.value(), self.light_color)
         self.preview.set_lighting(*values)
         self.mini_preview.set_lighting(*values)
         self._update_backlight_ui()
 
     def toggle_backlight(self):
-        self.nightlight.setChecked(not self.nightlight.isChecked())
+        if self.preview_mode != "lightbox":
+            self.preview_mode_selector.setCurrentIndex(0)
+            self.nightlight.setChecked(True)
+        else:
+            self.nightlight.setChecked(not self.nightlight.isChecked())
 
     def toggle_nightlight(self):
         # Backwards-compatible route for any prior shortcut or external caller.
@@ -1571,6 +1695,9 @@ class MainWindow(QMainWindow):
         except Exception:
             source_width, source_height = image.width(), image.height()
         self.image_path = path
+        # A newly loaded photo opens in Lightbox mode to prioritize the final
+        # transmitted image; changing mode never rebuilds or alters the STL.
+        self.preview_mode_selector.setCurrentIndex(0)
         self.preview.request_fit()
         self.mini_preview.request_fit()
         self.image_button.setText(self._tr("Change Image"))
@@ -1721,9 +1848,9 @@ class MainWindow(QMainWindow):
             #framePlacement::drop-down { border: none; width: 20px; }
             #framePlacement QAbstractItemView { color: #eef1fa; background: #151c2a; border: 1px solid #38445f; selection-background-color: #5964ed; }
             #hint { line-height: 1.35; padding-top: 3px; }
-            #reliefMode { color: #dce3ff; background: #141b2c; border: 1px solid #5365de; border-radius: 6px; min-height: 29px; min-width: 98px; padding: 0 8px; font-size: 10.5px; font-weight: 800; }
-            #reliefMode:hover { background: #202a4b; color: white; }
-            #reliefMode QAbstractItemView { color: #edf1fb; background: #151c2a; border: 1px solid #5365de; selection-background-color: #5964ed; }
+            #reliefMode, #previewMode { color: #dce3ff; background: #141b2c; border: 1px solid #5365de; border-radius: 6px; min-height: 29px; min-width: 98px; padding: 0 8px; font-size: 10.5px; font-weight: 800; }
+            #reliefMode:hover, #previewMode:hover { background: #202a4b; color: white; }
+            #reliefMode QAbstractItemView, #previewMode QAbstractItemView { color: #edf1fb; background: #151c2a; border: 1px solid #5365de; selection-background-color: #5964ed; }
             #mirrorButton { color: #bfcaff; background: #121928; border: 1px solid #3d4f9f; border-radius: 6px; min-height: 29px; font-size: 10.5px; font-weight: 700; }
             #mirrorButton:hover { background: #202944; color: white; }
             #mirrorButton:checked { color: white; background: #4656c7; border-color: #8191ff; }
@@ -1733,6 +1860,8 @@ class MainWindow(QMainWindow):
             #previewCard { background: #0d111b; border: 1px solid #1e283a; border-radius: 10px; }
             #previewTitle { color: #e9edf7; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; }
             #liveBadge { color: #9ea8ff; background: #18203a; border: 1px solid #33416e; border-radius: 4px; padding: 3px 6px; font-size: 9px; font-weight: 800; }
+            #modeBadge { color: #b9c7ff; background: #17213a; border: 1px solid #405aad; border-radius: 4px; padding: 3px 6px; font-size: 9px; font-weight: 800; }
+            #backlightStatus { color: #8996b0; font-size: 10px; line-height: 1.35; padding: 1px 0; }
             #previewTool { background: #151b29; border: 1px solid #2b354b; color: #d7ddeb; border-radius: 6px; font-size: 16px; }
             #previewTool:hover { border-color: #6474ef; background: #222a3e; }
             #meshPreview { background: #070b13; border: 1px solid #1b263a; border-radius: 8px; }
@@ -1779,3 +1908,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+ 

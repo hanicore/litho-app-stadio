@@ -495,3 +495,4 @@ def generate_lithophane(
         frame_bottom_mm=frame_bottom_mm,
         progress_cb=progress_cb,
     )
+  
