@@ -313,6 +313,27 @@ Litho Studio aims to remain:
 Large changes should be discussed before implementation whenever possible.
 
 ---
+## 🧊 3D Preview
+
+One of the project's goals is to develop a professional and reliable 3D preview experience.
+
+The 3D preview should aim to provide:
+
+* Smooth camera controls
+* Rotate, zoom, and pan
+* Accurate visualization of the generated lithophane
+* Clear lighting and depth representation
+* Professional rendering quality
+* Responsive interaction
+* Correct model proportions and dimensions
+* Reliable rendering without visual artifacts
+* A clean and modern presentation
+
+Contributors working on the 3D preview should prioritize **visual accuracy, stability, performance, and usability**.
+
+The goal is to make the preview feel like a professional 3D tool while keeping Litho Studio accessible and easy to use.
+
+
 
 ## ❤️ Thank You
 
