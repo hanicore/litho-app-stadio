@@ -1,344 +1,165 @@
-# 🤝 Contributing to Litho Studio
+# Contributing to Litho Studio
 
-Thank you for your interest in contributing to **Litho Studio**!
+Thank you for your interest in contributing to Litho Studio.
 
-Litho Studio is an open-source project focused on making image-to-lithophane creation simple, accessible, and enjoyable.
+Litho Studio is an open-source project, and contributions are welcome. This document explains the basic workflow for contributing code, documentation, bug fixes, and improvements.
 
-Whether you're fixing a bug, improving the interface, writing documentation, adding tests, or experimenting with new ideas, your contribution is welcome.
+## Before You Start
 
----
+Please check the existing GitHub issues before starting work.
 
-## 🌱 Ways You Can Contribute
+If you want to work on a new idea, consider opening an issue first so the proposed change can be discussed before implementation.
 
-You don't have to be an expert developer to contribute.
+## Development Setup
 
-### 🐛 Report Bugs
-
-Found something that doesn't work correctly?
-
-Open an Issue and describe:
-
-* What happened
-* What you expected
-* Steps to reproduce the problem
-* Your operating system
-* Your Python version
-* Any error messages
-* Screenshots when useful
-
----
-
-### 💡 Suggest Improvements
-
-Have an idea for Litho Studio?
-
-Open an Issue and explain:
-
-* What you would like to improve
-* Why it would be useful
-* How you think it could work
-
-For large changes, please discuss the idea before starting development.
-
----
-
-### 📚 Improve Documentation
-
-Documentation contributions are always useful.
-
-You can help improve:
-
-* README
-* Installation instructions
-* Tutorials
-* Code comments
-* Examples
-* Troubleshooting guides
-
----
-
-### 🧪 Add Tests
-
-Tests help keep Litho Studio reliable.
-
-You can contribute tests for:
-
-* Image processing
-* Heightmap generation
-* Mesh generation
-* STL export
-* Settings
-* Other core functionality
-
----
-
-### 🎨 Improve the UI
-
-If you have experience with PySide6 or UI design, you can help improve:
-
-* Layout
-* Usability
-* Accessibility
-* Visual consistency
-* User feedback
-* Error messages
-
----
-
-## 🚀 Getting Started
-
-### 1. Fork the Repository
-
-Create your own fork of the Litho Studio repository on GitHub.
-
-### 2. Clone Your Fork
+Clone the repository:
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/litho-app-stadio.git
+git clone https://github.com/hanicore/litho-app-stadio.git
 cd litho-app-stadio
 ```
 
-### 3. Create a Virtual Environment
-
-```bash
-python -m venv .venv
-```
-
-### 4. Activate It
-
-On Windows PowerShell:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-### 5. Install Dependencies
+Install the dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 6. Run Litho Studio
+Run the application:
 
 ```bash
 python main.py
 ```
 
----
+## Branches
 
-## 🌿 Create a Branch
+Do not make changes directly on the `main` branch.
 
-Please create a separate branch for your work.
+Create a separate branch for your work.
 
 For a new feature:
 
 ```bash
+git checkout main
+git pull origin main
 git checkout -b feature/short-description
 ```
 
 For a bug fix:
 
 ```bash
+git checkout main
+git pull origin main
 git checkout -b fix/short-description
 ```
 
-For documentation:
+For documentation changes:
 
 ```bash
 git checkout -b docs/short-description
 ```
 
-Example:
+## Making Changes
 
-```bash
-git checkout -b fix/image-processing-error
+Keep changes focused and easy to review.
+
+Before committing, make sure that:
+
+* The application starts correctly.
+* Your changes do not unnecessarily affect unrelated parts of the project.
+* Existing functionality still works.
+* Documentation is updated when necessary.
+* Temporary files and generated files are not committed.
+
+## Commit Messages
+
+Use short and descriptive commit messages.
+
+Good examples:
+
+```text
+Fix STL export issue
+Improve 3D preview
+Update installation instructions
+Fix image positioning
+Add contribution documentation
 ```
 
----
-
-## 💻 Make Your Changes
-
-Keep your changes focused.
-
-A Pull Request should ideally solve **one problem at a time**.
-
-Before submitting your work:
-
-* Test your changes
-* Check for obvious errors
-* Keep the code readable
-* Avoid unrelated changes
-* Update documentation when necessary
-
----
-
-## 🧪 Test Your Changes
-
-Run Litho Studio and make sure the affected functionality works correctly.
-
-If you add or modify functionality that can be tested automatically, please consider adding a test.
-
----
-
-## 📝 Commit Your Changes
-
-Use a clear commit message.
-
-Examples:
-
-```bash
-git add .
-git commit -m "Fix image processing error"
-```
-
-```bash
-git commit -m "Improve lithophane preview"
-```
-
-```bash
-git commit -m "Update installation documentation"
-```
-
-Try to explain **what changed**, rather than writing messages such as:
+Avoid vague messages such as:
 
 ```text
 update
 changes
-fixed stuff
-final
+fix
+stuff
 ```
 
----
+## Pull Requests
 
-## 📤 Push Your Branch
+Push your branch to GitHub:
 
 ```bash
 git push -u origin your-branch-name
 ```
 
-Example:
+Then open a Pull Request against the `main` branch.
 
-```bash
-git push -u origin fix/image-processing-error
-```
+A good Pull Request should explain:
 
----
+1. What was changed.
+2. Why the change was needed.
+3. How the change was tested.
+4. Any known limitations.
 
-## 🔀 Open a Pull Request
+Please keep Pull Requests focused on one main purpose whenever possible.
 
-Go to the Litho Studio repository on GitHub and open a Pull Request.
+## Bug Reports
 
-Your Pull Request should explain:
+When reporting a bug, include:
 
-### What changed?
+* A clear description of the problem.
+* Steps to reproduce it.
+* What you expected to happen.
+* What actually happened.
+* Your Python version.
+* Your operating system.
+* Relevant screenshots or error messages when available.
 
-Briefly describe your changes.
+Use the provided GitHub bug report template whenever possible.
 
-### Why?
+## Feature Requests
 
-Explain the problem or motivation.
+Before proposing a feature, check whether a similar request already exists.
 
-### Testing
+A feature request should explain:
 
-Explain how you tested the changes.
+* What the feature should do.
+* Why it would be useful.
+* How it could improve the existing workflow.
 
-### Related Issue
+Use the provided GitHub feature request template.
 
-If your Pull Request fixes an Issue, mention it.
+## Code Quality
 
-Example:
+Keep the code readable and maintainable.
 
-```text
-Closes #15
-```
+Prefer:
 
----
+* Clear variable and function names.
+* Small, focused functions.
+* Simple solutions over unnecessary complexity.
+* Comments only where they provide useful context.
 
-## 🏷️ Good Issues for New Contributors
+Avoid introducing dependencies unless they are actually needed.
 
-If you're new to the project, look for Issues with labels such as:
+## Respect the Existing Project
 
-* `good first issue`
-* `help wanted`
-* `documentation`
-* `bug`
-* `enhancement`
+Litho Studio is intended to remain focused on its core purpose: creating and previewing printable lithophanes.
 
-These are good starting points.
+When contributing, avoid unrelated changes that significantly increase the project's complexity.
 
----
+## Questions
 
-## ⚠️ Before Opening a Pull Request
+If you are unsure about an implementation, open a GitHub issue or discuss the proposed change before doing a large amount of work.
 
-Please check:
-
-* [ ] The project runs correctly
-* [ ] My changes solve the intended problem
-* [ ] I tested the affected functionality
-* [ ] I did not include unrelated changes
-* [ ] I updated documentation if necessary
-* [ ] My commit messages are clear
-* [ ] I explained my changes in the Pull Request
-
----
-
-## 🤖 AI-Assisted Contributions
-
-AI coding tools may be used to help understand code, brainstorm solutions, or write code.
-
-However, contributors are responsible for understanding and reviewing the code they submit.
-
-Please make sure that:
-
-* You understand your changes
-* You test generated code
-* You check for bugs
-* You respect the project's license
-* You do not submit generated code that you cannot explain or maintain
-
-AI should assist the contributor, not replace responsible development.
-
----
-
-## 🧭 Development Philosophy
-
-Litho Studio aims to remain:
-
-* 🧩 Simple
-* 🛠️ Maintainable
-* 📖 Understandable
-* 🖥️ User-friendly
-* 🌱 Open to contributors
-
-Large changes should be discussed before implementation whenever possible.
-
----
-## 🧊 3D Preview
-
-One of the project's goals is to develop a professional and reliable 3D preview experience.
-
-The 3D preview should aim to provide:
-
-* Smooth camera controls
-* Rotate, zoom, and pan
-* Accurate visualization of the generated lithophane
-* Clear lighting and depth representation
-* Professional rendering quality
-* Responsive interaction
-* Correct model proportions and dimensions
-* Reliable rendering without visual artifacts
-* A clean and modern presentation
-
-Contributors working on the 3D preview should prioritize **visual accuracy, stability, performance, and usability**.
-
-The goal is to make the preview feel like a professional 3D tool while keeping Litho Studio accessible and easy to use.
-
-
-
-## ❤️ Thank You
-
-Every contribution matters.
-
-A bug report, documentation fix, test, design improvement, or code contribution can help make Litho Studio better.
-
-Thank you for helping build Litho Studio! 🖼️
+Thank you for helping improve Litho Studio.
